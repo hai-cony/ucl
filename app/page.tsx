@@ -35,7 +35,7 @@ export default function Home() {
             className="h-32 block"
           >
             <div className="flex justify-center">
-              <Briefcase/>s
+              <Briefcase/>
             </div>
             <div>Inventory</div>
           </Button>
