@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 // db password : DOwMw7ffOxQGsr18
-export const supabase = createClient(
+export const supabaseServer = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
+  process.env.SUPABASE_ANON_KEY!,
 );

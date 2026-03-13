@@ -1,0 +1,353 @@
+Bagus 👍 karena kamu pakai **PostgreSQL**, saya akan buatkan:
+
+* ✅ Struktur database yang benar
+* ✅ Relasi antar tabel jelas
+* ✅ Alur produksi dari raw material → produk jadi
+* ✅ SQL siap pakai
+* ✅ Tidak terlalu kompleks tapi sudah profesional
+
+Kita buat versi **ERP Manufacturing Sederhana tapi Proper**.
+
+---
+
+# 🧠 GAMBARAN BESAR SISTEM
+
+Alur utama:
+
+```
+Supplier → Purchasing → Raw Material Stock
+Raw Material → Production → Finished Goods
+Finished Goods → Sales → Customer
+```
+
+---
+
+# 🗄️ 1️⃣ MASTER DATA
+
+## 🔹 ITEMS (Semua barang)
+
+```sql
+CREATE TABLE items (
+    id SERIAL PRIMARY KEY,
+    item_code VARCHAR(50) UNIQUE NOT NULL,
+    item_name VARCHAR(255) NOT NULL,
+    item_type VARCHAR(20) NOT NULL CHECK (item_type IN ('RAW', 'FINISHED')),
+    unit VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 🔹 SUPPLIERS
+
+```sql
+CREATE TABLE suppliers (
+    id SERIAL PRIMARY KEY,
+    supplier_name VARCHAR(255) NOT NULL,
+    phone VARCHAR(50),
+    address TEXT
+);
+```
+
+---
+
+## 🔹 CUSTOMERS
+
+```sql
+CREATE TABLE customers (
+    id SERIAL PRIMARY KEY,
+    customer_name VARCHAR(255) NOT NULL,
+    phone VARCHAR(50),
+    address TEXT
+);
+```
+
+---
+
+# 🏭 2️⃣ INVENTORY
+
+## 🔹 STOCK (Current stock)
+
+```sql
+CREATE TABLE stock (
+    item_id INT PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+    qty_on_hand NUMERIC(15,2) DEFAULT 0
+);
+```
+
+👉 Satu item = satu baris stok.
+
+---
+
+## 🔹 STOCK MOVEMENTS (Semua pergerakan dicatat)
+
+```sql
+CREATE TABLE stock_movements (
+    id SERIAL PRIMARY KEY,
+    item_id INT REFERENCES items(id),
+    movement_type VARCHAR(30) CHECK (
+        movement_type IN ('PURCHASE', 'PRODUCTION_IN', 'PRODUCTION_OUT', 'SALE')
+    ),
+    qty NUMERIC(15,2) NOT NULL,
+    reference_type VARCHAR(20),
+    reference_id INT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+# 🛒 3️⃣ PURCHASING
+
+## 🔹 PURCHASE ORDERS
+
+```sql
+CREATE TABLE purchase_orders (
+    id SERIAL PRIMARY KEY,
+    po_number VARCHAR(50) UNIQUE NOT NULL,
+    supplier_id INT REFERENCES suppliers(id),
+    order_date DATE NOT NULL,
+    status VARCHAR(20) DEFAULT 'DRAFT'
+);
+```
+
+---
+
+## 🔹 PURCHASE ORDER DETAILS
+
+```sql
+CREATE TABLE purchase_order_details (
+    id SERIAL PRIMARY KEY,
+    po_id INT REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    item_id INT REFERENCES items(id),
+    qty NUMERIC(15,2),
+    price NUMERIC(15,2)
+);
+```
+
+---
+
+# 🏭 4️⃣ PRODUCTION
+
+## 🔹 BILL OF MATERIALS (BOM)
+
+```sql
+CREATE TABLE bill_of_materials (
+    id SERIAL PRIMARY KEY,
+    product_id INT REFERENCES items(id)
+);
+```
+
+---
+
+## 🔹 BOM DETAILS
+
+```sql
+CREATE TABLE bom_details (
+    id SERIAL PRIMARY KEY,
+    bom_id INT REFERENCES bill_of_materials(id) ON DELETE CASCADE,
+    material_id INT REFERENCES items(id),
+    qty_required NUMERIC(15,2)
+);
+```
+
+---
+
+## 🔹 PRODUCTION ORDERS
+
+```sql
+CREATE TABLE production_orders (
+    id SERIAL PRIMARY KEY,
+    product_id INT REFERENCES items(id),
+    qty_planned NUMERIC(15,2),
+    qty_produced NUMERIC(15,2) DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'DRAFT',
+    start_date DATE,
+    end_date DATE
+);
+```
+
+---
+
+# 💰 5️⃣ SALES
+
+## 🔹 SALES ORDERS
+
+```sql
+CREATE TABLE sales_orders (
+    id SERIAL PRIMARY KEY,
+    so_number VARCHAR(50) UNIQUE NOT NULL,
+    customer_id INT REFERENCES customers(id),
+    order_date DATE NOT NULL,
+    status VARCHAR(20) DEFAULT 'DRAFT'
+);
+```
+
+---
+
+## 🔹 SALES ORDER DETAILS
+
+```sql
+CREATE TABLE sales_order_details (
+    id SERIAL PRIMARY KEY,
+    so_id INT REFERENCES sales_orders(id) ON DELETE CASCADE,
+    item_id INT REFERENCES items(id),
+    qty NUMERIC(15,2),
+    price NUMERIC(15,2)
+);
+```
+
+---
+
+# 🔄 ALUR PRODUKSI DI DATABASE
+
+Sekarang saya jelaskan secara teknis bagaimana data mengalir.
+
+---
+
+# 🟢 CONTOH KASUS NYATA
+
+Produk: Meja
+Bahan:
+
+* Kayu
+* Paku
+
+---
+
+## 1️⃣ BELI BAHAN
+
+Insert:
+
+* purchase_orders
+* purchase_order_details
+
+Tambahkan ke stock_movements:
+
+```
+movement_type = 'PURCHASE'
+qty = 100
+```
+
+Update stock:
+
+```
+qty_on_hand = qty_on_hand + 100
+```
+
+---
+
+## 2️⃣ BUAT PRODUCTION ORDER
+
+Insert:
+
+```
+production_orders
+product_id = Meja
+qty_planned = 10
+```
+
+---
+
+## 3️⃣ KURANGI RAW MATERIAL
+
+Insert ke stock_movements:
+
+```
+movement_type = 'PRODUCTION_OUT'
+qty = 20
+```
+
+Update stock:
+
+```
+qty_on_hand = qty_on_hand - 20
+```
+
+---
+
+## 4️⃣ TAMBAH FINISHED GOODS
+
+Insert ke stock_movements:
+
+```
+movement_type = 'PRODUCTION_IN'
+qty = 10
+```
+
+Update stock:
+
+```
+qty_on_hand = qty_on_hand + 10
+```
+
+---
+
+## 5️⃣ JUAL PRODUK
+
+Insert sales_orders
+
+Insert stock_movements:
+
+```
+movement_type = 'SALE'
+qty = 5
+```
+
+Update stock:
+
+```
+qty_on_hand = qty_on_hand - 5
+```
+
+---
+
+# 📊 CARA HITUNG STOK (Jika Tidak Pakai Tabel STOCK)
+
+Kalau mau hitung dari movement saja:
+
+```sql
+SELECT
+    item_id,
+    SUM(
+        CASE
+            WHEN movement_type IN ('PURCHASE', 'PRODUCTION_IN') THEN qty
+            ELSE -qty
+        END
+    ) as current_stock
+FROM stock_movements
+GROUP BY item_id;
+```
+
+---
+
+# 🎯 STRUKTUR INI SUDAH:
+
+✔ Relasional
+✔ Bisa dikembangkan ke Accounting
+✔ Bisa tambah multi warehouse
+✔ Bisa tambah costing
+✔ Bisa tambah role user
+
+---
+
+# 🚀 Selanjutnya Bisa Ditambah:
+
+* Trigger otomatis update stock
+* Constraint agar stok tidak minus
+* FIFO costing
+* WIP (Work In Process)
+* Accounting Journal
+* Multi warehouse
+
+---
+
+Kalau kamu mau, saya bisa lanjutkan:
+
+1. Buatkan ERD diagram
+2. Buatkan trigger PostgreSQL otomatis update stok
+3. Buatkan simulasi data produksi lengkap
+4. Tambahkan sistem costing
+
+Kamu mau lanjut ke mana?
